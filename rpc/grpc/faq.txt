@@ -1,0 +1,4 @@
+
+protoc -I .  --go_out=plugins=grpc:. user.proto
+cp user.pb.go $GOPATH/src/com/beyanger/service
+
