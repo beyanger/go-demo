@@ -3,8 +3,8 @@ package main
 
 import (
     "fmt"
-    "os"
     "time"
+    "os"
     "bufio"
     "sort"
     "encoding/binary"
@@ -14,23 +14,24 @@ import (
     "strconv"
 )
 
-var wg = make(chan bool, CNT)
-var starttime = time.Now()
 
 const (
-    CNT = 10
-    SIZE = 1e3
+    COUNT = 10
+    SIZE = 10
     PORT = 8000
+    SERVER = "127.0.0.1"
+    OUTFILE = "out.txt"
 )
+
+var dataPrepared = make(chan struct{}, COUNT)
+var starttime = time.Now()
 
 func RandomSource(cnt int) <-chan int {
     ch := make(chan int)
 
     go func() {
         for i := 0; i < cnt; i++ {
-            r := rand.Int()
-            fmt.Println(r)
-            ch <- r
+            ch <- rand.Int()
         }
         close(ch)
     }()
@@ -40,19 +41,14 @@ func RandomSource(cnt int) <-chan int {
 
 func NetworkSource(seq, size int) <-chan int {
     ch := make(chan int)
-
     go func() {
-        addr := ":" + strconv.Itoa(PORT + seq)
+        addr := SERVER + ":" + strconv.Itoa(PORT + seq)
         conn, err := net.Dial("tcp", addr)
-
         if err != nil {
             panic(err)
         }
-
         reader := bufio.NewReader(conn)
-
         buffer := make([]byte, 8)
-
         for i := 0; i < size; i++ {
             n, err := reader.Read(buffer)
             if n > 0 {
@@ -68,7 +64,7 @@ func NetworkSource(seq, size int) <-chan int {
     return ch
 }
 
-func WriterSink(writer io.Writer, ch <-chan int) {
+func binaryWriterSink(writer io.Writer, ch <-chan int) {
     buffer := make([]byte, 8)
     for v := range ch {
         binary.BigEndian.PutUint64(buffer, uint64(v))
@@ -76,14 +72,23 @@ func WriterSink(writer io.Writer, ch <-chan int) {
     }
 }
 
+func textWriterSink(writer io.Writer, ch <-chan int) {
+    for v := range ch {
+        tv := strconv.Itoa(v)
+        writer.Write([]byte(tv))
+        writer.Write([]byte{'\n'})
+    }
+}
+
 func NetworkSink(seq int, ch <-chan int) {
-    addr := ":"+strconv.Itoa(seq+PORT)
+    addr := SERVER+":"+strconv.Itoa(seq+PORT)
     ln, err := net.Listen("tcp", addr)
     if err != nil {
         panic(err)
     }
 
-    wg <- true
+    fmt.Printf("Worker %d data prepared with %v\n", seq, time.Now().Sub(starttime))
+    dataPrepared <- struct{}{}
 
     go func() {
         conn, err := ln.Accept()
@@ -91,7 +96,7 @@ func NetworkSink(seq int, ch <-chan int) {
             panic(err)
         }
         writer := bufio.NewWriter(conn)
-        WriterSink(writer, ch)
+        binaryWriterSink(writer, ch)
         writer.Flush()
         conn.Close()
         ln.Close()
@@ -99,20 +104,18 @@ func NetworkSink(seq int, ch <-chan int) {
 }
 
 func DataSource(seq, cnt int) {
-    ch := RandomSource(cnt)
-    data := make([]int, 0)
-    for n := range ch {
-        data = append(data, n)
+    data := make([]int, 0, cnt)
+    for i := 0; i < cnt; i++ {
+        data = append(data, rand.Int())
     }
 
     sort.Ints(data)
 
-    fmt.Printf("Worker: %d sort done with: %v\n", seq, time.Now().Sub(starttime))
-    sch := make(chan int)
+    sch := make(chan int, 8)
 
-    go func(){
-        for _, n := range data {
-            sch <- n
+    go func() {
+        for i := range data {
+            sch <- data[i]
         }
         close(sch)
     }()
@@ -120,19 +123,19 @@ func DataSource(seq, cnt int) {
 }
 
 func PrepareData() {
-    for i := 0; i < CNT; i++ {
+    for i := 0; i < COUNT; i++ {
         go DataSource(i, SIZE)
     }
 }
 
 func Merge(ch1, ch2 <-chan int) <-chan int {
     out := make(chan int)
-    go func(){
+    go func() {
         v1, ok1 := <-ch1
         v2, ok2 := <-ch2
 
         for ok1 || ok2 {
-            if ok1 && (!ok2 || v1 > v2) {
+            if !ok2 || (ok1 && v1 <= v2) {
                 out <-v1
                 v1, ok1 = <-ch1
             } else {
@@ -155,30 +158,30 @@ func MergeN(data []<-chan int) <-chan int {
 
 func main() {
 
+    rand.Seed(time.Now().UnixNano())
+
     PrepareData()
     // wait all data prepared
-    for i := 0; i < CNT; i++ {
-        <-wg
+    for i := 0; i < COUNT; i++ {
+        <-dataPrepared
     }
 
-    fmt.Printf("All workder done with: %v\n", time.Now().Sub(starttime))
-
     data := make([]<-chan int, 0)
-    for i := 0; i < CNT; i++ {
+    for i := 0; i < COUNT; i++ {
         dt := NetworkSource(i, SIZE)
         data = append(data, dt)
     }
     sn := MergeN(data)
 
-    outfile := "out.file"
-    file, err := os.OpenFile(outfile, os.O_RDWR|os.O_CREATE, 0644)
+    file, err := os.OpenFile(OUTFILE, os.O_RDWR|os.O_CREATE, 0644)
     if err != nil {
         panic(err)
     }
 
     writer := bufio.NewWriter(file)
-    WriterSink(writer, sn)
+    textWriterSink(writer, sn)
     writer.Flush()
     file.Close()
     fmt.Printf("Merge sort done with: %v\n", time.Now().Sub(starttime))
 }
+

@@ -12,20 +12,13 @@ import (
     "strconv"
 )
 
-var wg = make(chan bool, CNT)
 var starttime = time.Now()
-
-const (
-    CNT = 10
-    SIZE = 1e3
-    PORT = 8000
-)
 
 func NetworkSource(seq, size int) <-chan int {
     ch := make(chan int)
 
     go func() {
-        addr := ":" + strconv.Itoa(PORT + seq)
+        addr := SERVER + ":" + strconv.Itoa(PORT + seq)
         conn, err := net.Dial("tcp", addr)
 
         if err != nil {
@@ -59,8 +52,6 @@ func WriterSink(writer io.Writer, ch <-chan int) {
     }
 }
 
-
-
 func Merge(ch1, ch2 <-chan int) <-chan int {
     out := make(chan int)
     go func(){
@@ -68,7 +59,7 @@ func Merge(ch1, ch2 <-chan int) <-chan int {
         v2, ok2 := <-ch2
 
         for ok1 || ok2 {
-            if ok1 && (!ok2 || v1 > v2) {
+            if !ok2 && (ok1 || v1 <= v2) {
                 out <-v1
                 v1, ok1 = <-ch1
             } else {
@@ -81,24 +72,22 @@ func Merge(ch1, ch2 <-chan int) <-chan int {
     return out
 }
 
-func MergeN(data []<-chan int) <-chan int {
+func MergeN(data ...<-chan int) <-chan int {
     ld := len(data)
     if ld == 1 {
         return data[0]
     }
-    return Merge(MergeN(data[:ld/2]), MergeN(data[ld/2:]))
+    return Merge(MergeN(data[:ld/2]...), MergeN(data[ld/2:]...))
 }
 
 func main() {
-
-    fmt.Printf("All workder done with: %v\n", time.Now().Sub(starttime))
 
     data := make([]<-chan int, 0)
     for i := 0; i < CNT; i++ {
         dt := NetworkSource(i, SIZE)
         data = append(data, dt)
     }
-    sn := MergeN(data)
+    sn := MergeN(data...)
 
     outfile := "out.file"
     file, err := os.OpenFile(outfile, os.O_RDWR|os.O_CREATE, 0644)

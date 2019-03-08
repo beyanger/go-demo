@@ -13,14 +13,9 @@ import (
     "strconv"
 )
 
-var wg = make(chan bool, CNT)
+var prepared = make(chan bool, CNT)
+var done = make(chan bool, CNT)
 var starttime = time.Now()
-
-const (
-    CNT = 10
-    SIZE = 1e3
-    PORT = 8000
-)
 
 func RandomSource(cnt int) <-chan int {
     ch := make(chan int)
@@ -35,35 +30,6 @@ func RandomSource(cnt int) <-chan int {
 }
 
 
-func NetworkSource(seq, size int) <-chan int {
-    ch := make(chan int)
-
-    go func() {
-        addr := ":" + strconv.Itoa(PORT + seq)
-        conn, err := net.Dial("tcp", addr)
-
-        if err != nil {
-            panic(err)
-        }
-
-        reader := bufio.NewReader(conn)
-
-        buffer := make([]byte, 8)
-
-        for i := 0; i < size; i++ {
-            n, err := reader.Read(buffer)
-            if n > 0 {
-                val := binary.BigEndian.Uint64(buffer)
-                ch <-int(val)
-            }
-            if err != nil {
-                break
-            }
-        }
-        close(ch)
-    }()
-    return ch
-}
 
 func WriterSink(writer io.Writer, ch <-chan int) {
     buffer := make([]byte, 8)
@@ -74,12 +40,13 @@ func WriterSink(writer io.Writer, ch <-chan int) {
 }
 
 func NetworkSink(seq int, ch <-chan int) {
-    addr := ":"+strconv.Itoa(seq+PORT)
+    addr := SERVER + ":"+strconv.Itoa(seq+PORT)
     ln, err := net.Listen("tcp", addr)
     if err != nil {
         panic(err)
     }
 
+    prepared <- true
     go func() {
         conn, err := ln.Accept()
         if err != nil {
@@ -90,7 +57,7 @@ func NetworkSink(seq int, ch <-chan int) {
         writer.Flush()
         conn.Close()
         ln.Close()
-        wg <- true
+        done <- true
     }()
 }
 
@@ -121,42 +88,18 @@ func PrepareData() {
     }
 }
 
-func Merge(ch1, ch2 <-chan int) <-chan int {
-    out := make(chan int)
-    go func(){
-        v1, ok1 := <-ch1
-        v2, ok2 := <-ch2
-
-        for ok1 || ok2 {
-            if ok1 && (!ok2 || v1 > v2) {
-                out <-v1
-                v1, ok1 = <-ch1
-            } else {
-                out <-v2
-                v2, ok2 = <-ch2
-            }
-        }
-        close(out)
-    }()
-    return out
-}
-
-func MergeN(data []<-chan int) <-chan int {
-    ld := len(data)
-    if ld == 1 {
-        return data[0]
-    }
-    return Merge(MergeN(data[:ld/2]), MergeN(data[ld/2:]))
-}
-
 func main() {
 
     PrepareData()
-    // wait all data prepared
     for i := 0; i < CNT; i++ {
-        <-wg
+        <-prepared
+    }
+
+    fmt.Printf("All workder prepared with: %v\n", time.Now().Sub(starttime))
+
+    for i := 0; i < CNT; i++ {
+        <-done
     }
 
     fmt.Printf("All workder done with: %v\n", time.Now().Sub(starttime))
-
 }
