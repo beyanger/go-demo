@@ -1,6 +1,6 @@
 
 syntax = "proto3";
-package com.beyanger.service
+package com.beyanger.service;
 
 service UserInfoService {
     rpc GetUserInfo(UserRequest) returns (UserResponse) {}

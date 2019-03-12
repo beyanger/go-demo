@@ -1,0 +1,62 @@
+
+URL Uniform Resource Locator
+
+http://user@passwd@host.com:80/srouce/path?query=string#hash
+
+URN 永久统一资源定位符
+
+
+http:
+
+request
+GET /test/source.txt HTTP/1.0 \r\n
+Accept: text/*\r\n
+Accept-Language:en,cn\r\n
+\r\n
+
+
+
+Response
+HTTP/1.0 200 OK\r\n
+Content-Type: text/plain\r\n
+Content-Lenght:19\r\n
+\r\n
+Hi! I'm a message!
+
+Method
+GET POST HEAD DELETE CONNECTION OPTIONS TRACE 
+
+Code
+200~299 ok
+300~399 redirect
+400~499 param 
+500~599 server internal error
+
+Content-Type: text/html
+
+"Access-Control-Allow-Origin":"*"  指定可跨域的URL
+服务器同意，由浏览器控制
+标签上的路径是允许跨域的
+
+Cache-Control max-age=2000, no-cache/no-store
+
+
+
+缓存
+If-Modified-Since
+If-Unmodified-Since
+
+
+Last-Modified: '123'
+Etag:'777'
+
+Etag 数据签名hash值
+If-Match
+If-Non-Match
+
+
+
+
+
+
+

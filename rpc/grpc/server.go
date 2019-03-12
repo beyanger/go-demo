@@ -1,7 +1,6 @@
 
 package main
 import (
-    "fmt"
     "context"
     "net"
     srv "com/beyanger/service"
@@ -10,20 +9,18 @@ import (
 
 
 type dataCenter struct {
-
+    age int32
 }
-
-var age int32 = 22
 
 func (dc *dataCenter) GetUserInfo(ctx context.Context, req *srv.UserRequest) (resp *srv.UserResponse, err error) {
 
     name := req.GetName()
     if name == "yang" {
-        age++
+        dc.age++
         resp = &srv.UserResponse{
             Id:1,
             Name:"yang shuangyi",
-            Age: age,
+            Age: dc.age,
             Title: []string{"shabi", "danteng", "hahaha"},
         }
     }
@@ -32,14 +29,12 @@ func (dc *dataCenter) GetUserInfo(ctx context.Context, req *srv.UserRequest) (re
 }
 
 func main() {
-    fmt.Println(grpc.Version)
-    fmt.Println(grpc.ErrClientConnClosing)
     l, err := net.Listen("tcp", ":2333")
     if err != nil {
         panic(err)
     }
     server := grpc.NewServer()
-    dc := dataCenter{}
+    dc := dataCenter{age:22}
     srv.RegisterUserInfoServiceServer(server, &dc)
     server.Serve(l)
 }
