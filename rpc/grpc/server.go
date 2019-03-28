@@ -34,7 +34,7 @@ func main() {
         panic(err)
     }
     server := grpc.NewServer()
-    dc := dataCenter{age:22}
+    dc := dataCenter{age:0}
     srv.RegisterUserInfoServiceServer(server, &dc)
     server.Serve(l)
 }

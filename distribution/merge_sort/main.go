@@ -76,7 +76,7 @@ func textWriterSink(writer io.Writer, ch <-chan int) {
     for v := range ch {
         tv := strconv.Itoa(v)
         writer.Write([]byte(tv))
-        writer.Write([]byte{'\n'})
+        writer.Write([]byte("\n"))
     }
 }
 
